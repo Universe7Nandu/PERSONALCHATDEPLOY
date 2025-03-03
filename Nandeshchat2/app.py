@@ -221,7 +221,7 @@ def main():
     # ---------------- SIDEBAR ----------------
     with st.sidebar:
         st.header("About")
-        image_path = os.path.join(os.path.dirname(__file__), "photo2.jpg")
+        image_path = os.path.join(os.path.dirname(__file__), "photo2.jpeg")
         st.image(image_path, width=150, caption="Local Photo")
         st.markdown("""
 **Name**: *Nandesh Kalashetti*  
