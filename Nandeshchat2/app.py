@@ -221,7 +221,8 @@ def main():
     # ---------------- SIDEBAR ----------------
     with st.sidebar:
         st.header("About")
-        st.image("https://via.placeholder.com/150", width=150)
+        image_path = os.path.join(os.path.dirname(__file__), "photo2.jpg")
+        st.image(image_path, width=150, caption="Local Photo")
         st.markdown("""
 **Name**: *Nandesh Kalashetti*  
 **Role**: *GenAi Developer*  
