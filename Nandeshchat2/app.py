@@ -8,8 +8,6 @@ from PyPDF2 import PdfReader
 from docx import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-# Note: The Chroma class is deprecated in current langchain versions.
-# For now we use it as before.
 from langchain_community.vectorstores import Chroma
 from langchain_groq import ChatGroq
 
@@ -20,78 +18,52 @@ try:
 except ImportError:
     raise RuntimeError("Install pysqlite3-binary: pip install pysqlite3-binary")
 
-# 2. CONFIGURATION
+# 2. CONFIG
 GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-# Use a temporary persistent directory so that memory is cleared on new chat or reload
 CHROMA_SETTINGS = {
     "persist_directory": "chroma_db_temp",
     "collection_name": "uploaded_doc_collection"
 }
 
-# SYSTEM PROMPTS
+# PROMPTS:
 NANDESH_SYSTEM_PROMPT = """
-## *Nandesh Kalashetti's Profile*
-- *Name:* Nandesh Kalashetti
-- *Title:* Full-Stack Web Developer
-- *Email:* nandeshkalshetti1@gmail.com
-- *Phone:* 9420732657
-- *Location:* Samarth Nagar, Akkalkot
-- *Portfolio:* [Visit Portfolio](https://nandesh-kalashettiportfilio2386.netlify.app/)
+## *Default: Nandesh’s Profile*
+- Name: **Nandesh Kalashetti**  
+- Title: **Full-Stack Web Developer**  
+- Email: **nandeshkalshetti1@gmail.com**  
+- Phone: **9420732657**  
+- Location: **Samarth Nagar, Akkalkot**  
+- Portfolio: [Click Here](https://nandesh-kalashettiportfilio2386.netlify.app/)  
 
-## *Objectives*
-Aspiring full-stack developer with a strong foundation in web development technologies, eager to leverage skills in React.js, TypeScript, PHP, Java, and the MERN stack to create impactful and innovative solutions.
-
-## *Education*
-- *Bachelor in Information Technology* – Walchand Institute of Technology, Solapur (Dec 2021 - April 2025) | *CGPA:* 8.8/10  
-- *12th (HSC)* – Walchand College of Arts and Science, Solapur | *Percentage:* 89%  
-- *10th (SSC)* – Mangrule High School (KLE SOCIETY), Solapur | *Percentage:* 81.67%
-
-## *Experience*
-- *Full-Stack Developer Intern* at Katare Informatics, Solapur (May 2023 - October 2023, 6 months)  
-  - Worked on HTML, CSS, JavaScript, MySQL, XAMPP, Advanced PHP  
-  - Gained hands-on experience in both front-end and back-end development
-
-## *Skills*
-- *Programming:* Java, JavaScript, TypeScript, Python  
-- *Web Development:* HTML, CSS, React.js, Node.js, Express.js, MongoDB  
-- *Frameworks & Libraries:* React.js, Redux, TypeScript, Laravel  
-- *Tools & Platforms:* Git, Jenkins, Docker, Tomcat, Maven  
-- *Cloud & DevOps:* AWS Cloud Foundations, CI/CD pipelines  
-- *Databases:* MySQL, MongoDB
-
-## *Projects*
-- *ActivityHub:* Social learning platform using React.js, HTML5, CSS3, Advanced PHP, MySQL  
-- *AdvancedCounter Application:* Mathematical utility counter built with React.js, utilizing advanced state management and modular design  
-- *E-Cart:* Modern online shopping website with light/dark modes and user-friendly navigation  
-- *Online Course Catalog:* Web application featuring interlinked course pages, instructor details, and automated deployment via Jenkins, Maven, and Tomcat  
-- ...and many more. Check GitHub for details!
-
-## *Certifications & Achievements*
-- *Certifications:* AWS Cloud Foundations (AWS Academy), DevOps Workshop, Infosys Courses  
-- *Achievements:*  
-  - Achieved 4/5 rating in AICTE Assessment Test  
-  - Improved organizational efficiency by 30%  
-  - Completed over 10+ successful projects
+## *Skills & Background*
+- Strong foundation in web development (React.js, TypeScript, PHP, Java, MERN stack)
+- Education: B.Tech in IT, 8.8 CGPA
+- Internship: Katare Informatics (6 months), full-stack tasks
+- Projects: ActivityHub, E-Cart, Online Course Catalog, etc.
+- Achievements: 4/5 AICTE rating, improved org efficiency by 30%
 
 ---
+
 ## *Chatbot Instructions*
-- For *simple queries*: Provide concise answers (under six words) with fun emojis (😊, 🚀, 👍).
-- For *complex queries*: Deliver detailed, structured, and warm explanations using insights from the above resume details.
-- *Never reveal* that I am not human.
-- Always remain professional, helpful, and friendly.
+- **Short** queries → short answers (≤6 words + fun emojis).
+- **Detailed** queries → structured, warm explanations using info above.
+- If user specifically says “short answer,” keep it brief. If “detailed,” provide thorough detail.
+- *Never reveal* that you are not human.
+- Maintain a professional, helpful tone.
 """
 
 DOC_SYSTEM_PROMPT = """
-## Chatbot Instructions
-- For *simple queries*: Provide concise answers (under six words) with fun emojis (😊, 🚀, 👍).
-- For *complex queries*: Deliver detailed, structured, and warm explanations using only the uploaded document's context.
-- *Never reveal* that I am not human.
-- If information is missing from the document, say: "I don't have enough information from the document to answer that."
-- Remain professional and helpful.
+## *Document-based Chat*
+- Use **only** the uploaded document’s content.
+- If the doc lacks info, say: "I don't have enough information from the document to answer that."
+- **Short** queries → short answers (≤6 words + emojis).
+- **Detailed** queries → structured, thorough answers from the doc.
+- *Never reveal* that you are not human.
+- Remain helpful, warm, and professional.
 """
 
-# ASYNC SETUP
+# ASYNC
 nest_asyncio.apply()
 
 # CORE FUNCTIONS
@@ -108,7 +80,7 @@ def process_document(file):
     try:
         if ext == ".pdf":
             pdf = PdfReader(file)
-            return "\n".join(page.extract_text() for page in pdf.pages)
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
         elif ext == ".csv":
             df = pd.read_csv(file)
             return df.to_csv(index=False)
@@ -129,16 +101,17 @@ def chunk_text(text):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     return splitter.split_text(text)
 
-# MAIN APP
+# MAIN
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- ADVANCED CSS / UI ---
+    # Inject advanced CSS with unsafe_allow_html=True so it does NOT print
     st.markdown("""
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap">
     <style>
-    /* Main font & background */
-    html, body, [class*="css"]  {
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
+    /* Overall font & background */
+    html, body, [class*="css"] {
         font-family: 'Poppins', sans-serif;
     }
     body {
@@ -147,7 +120,7 @@ def main():
     }
     header, footer {visibility: hidden;}
 
-    /* Chat container with glassy effect */
+    /* Container for chat */
     .chat-container {
         max-width: 900px;
         margin: 40px auto 60px auto;
@@ -166,7 +139,7 @@ def main():
         text-align: center;
         color: #fff;
         margin-bottom: 5px;
-        font-size: 2.5rem;
+        font-size: 2.4rem;
         font-weight: 600;
     }
     .chat-subtitle {
@@ -176,15 +149,16 @@ def main():
         margin-bottom: 20px;
         font-size: 1.1rem;
     }
-    @keyframes fadeUp {
-        from {opacity: 0; transform: translateY(10px);}
-        to {opacity: 1; transform: translateY(0);}
-    }
     .element-container {
         animation: fadeUp 0.4s ease;
         margin-bottom: 20px !important;
     }
-    /* Sidebar dark theme */
+    @keyframes fadeUp {
+        from {opacity: 0; transform: translateY(10px);}
+        to {opacity: 1; transform: translateY(0);}
+    }
+
+    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: #1c1f24 !important;
         color: #fff !important;
@@ -206,7 +180,8 @@ def main():
     [data-testid="stSidebar"] .stButton>button:hover {
         background: #fbd96a !important;
     }
-    /* File uploader style override */
+
+    /* File uploader style */
     .stFileUploader label div {
         background: #ffe6a7 !important;
         color: #000 !important;
@@ -220,7 +195,8 @@ def main():
     .stFileUploader label div:hover {
         background: #ffd56b !important;
     }
-    /* Pinned chat input with black text */
+
+    /* Pinned chat input at bottom, black text */
     .stChatInput {
         position: sticky;
         bottom: 0;
@@ -242,10 +218,9 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # ------------- SIDEBAR -------------
+    # ---------------- SIDEBAR ----------------
     with st.sidebar:
         st.header("About")
-        # Replace the local image with an external placeholder image
         st.image("https://via.placeholder.com/150", width=150)
         st.markdown("""
 **Name**: *Nandesh Kalashetti*  
@@ -254,36 +229,37 @@ def main():
 [LinkedIn](https://www.linkedin.com/in/nandesh-kalashetti-333a78250/) | [GitHub](https://github.com/Universe7Nandu)
         """)
         st.markdown("---")
-        st.header("How to Use ✨")
-        st.markdown("""
-1. **Upload** a document (PDF, DOCX, TXT, CSV, MD) *optional*.  
-2. **Process** it with the **Process Document** button.  
-3. **Ask** questions in the pinned chat box below.  
-4. **New Chat** resets everything, clearing any uploaded document.
 
-- If **no document** is processed, the bot uses **Nandesh’s** info.  
-- If a document is processed, it uses *only* that document’s content.
+        st.header("How to Use")
+        st.markdown("""
+1. (Optional) **Upload** a PDF/DOCX/TXT/CSV/MD.  
+2. **Process** it with "Process Document."  
+3. **Ask** in the chat box below.  
+4. **New Chat** clears everything.
+
+- If no doc is processed, chatbot uses **Nandesh’s** info.  
+- If doc is processed, it uses **only** that doc’s info.
         """)
         st.markdown("---")
+
         st.header("Conversation History")
-        if st.button("New Chat", help="Clears conversation and uploaded document memory."):
+        if st.button("New Chat", help="Clear conversation & doc memory."):
             st.session_state.pop("chat_history", None)
             st.session_state.pop("document_processed", None)
             st.success("New conversation started! 🆕")
+
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
             for i, item in enumerate(st.session_state["chat_history"], start=1):
                 st.markdown(f"{i}. **You**: {item['question']}")
         else:
-            st.info("No conversation history yet. Start chatting!")
+            st.info("No conversation history yet. Ask away!")
 
-    # ------------- MAIN CHAT CONTAINER -------------
+    # ---------------- MAIN CHAT ----------------
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Document Upload • ChatGPT‐Style Q&A • Temporary Memory</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Document‐based or Default to Nandesh</p>", unsafe_allow_html=True)
 
-    # Document Upload & Processing
-    uploaded_file = st.file_uploader("Upload Document (CSV/TXT/PDF/DOCX/MD)",
-                                     type=["csv", "txt", "pdf", "docx", "md"])
+    uploaded_file = st.file_uploader("Upload (CSV/TXT/PDF/DOCX/MD)", type=["csv", "txt", "pdf", "docx", "md"])
     if uploaded_file:
         if "document_processed" not in st.session_state or not st.session_state["document_processed"]:
             if st.button("Process Document"):
@@ -298,35 +274,39 @@ def main():
     else:
         st.info("No document uploaded. Using Nandesh's info by default.")
 
-    # Initialize chat history if not already present
+    # Chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # Display existing chat messages
-    for message_data in st.session_state["chat_history"]:
+    # Display chat so far
+    for msg in st.session_state["chat_history"]:
         with st.chat_message("user"):
-            st.markdown(message_data["question"])
+            st.markdown(msg["question"])
         with st.chat_message("assistant"):
-            st.markdown(message_data["answer"])
+            st.markdown(msg["answer"])
 
-    st.markdown("</div>", unsafe_allow_html=True)  # End chat container
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # -------------- Chat Input (Pinned at Bottom) --------------
+    # -------------- Chat Input --------------
     user_query = st.chat_input("Type your message here... (Press Enter)")
     if user_query:
+        # Show user message immediately
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
 
-        with st.spinner("Thinking... 🤔"):
-            # If a document is processed, use its context; otherwise use Nandesh's info
+        # Decide which context to use
+        with st.spinner("Thinking..."):
             if st.session_state.get("document_processed"):
+                # Use doc context
                 vector_store = initialize_vector_store()
                 docs = vector_store.similarity_search(user_query, k=3)
                 context = "\n".join([d.page_content for d in docs])
                 prompt = f"{DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
             else:
+                # Use Nandesh's default
                 prompt = f"{NANDESH_SYSTEM_PROMPT}\nQuestion: {user_query}"
+
             llm = ChatGroq(
                 temperature=0.7,
                 groq_api_key=GROQ_API_KEY,
@@ -335,6 +315,7 @@ def main():
             response = asyncio.run(llm.ainvoke([{"role": "user", "content": prompt}]))
             bot_answer = response.content
 
+        # Update last answer
         st.session_state["chat_history"][-1]["answer"] = bot_answer
         with st.chat_message("assistant"):
             st.markdown(bot_answer)
