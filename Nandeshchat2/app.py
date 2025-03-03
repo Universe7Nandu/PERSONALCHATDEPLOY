@@ -26,7 +26,7 @@ CHROMA_SETTINGS = {
     "collection_name": "resume_collection"
 }
 
-# Prompts:
+# PROMPTS
 NANDESH_SYSTEM_PROMPT = """
 ## *Nandesh Kalashetti's Profile*
 - *Name:* Nandesh Kalashetti
@@ -130,51 +130,70 @@ def chunk_text(text):
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- Custom CSS for a modern, colorful ChatGPT-like interface ---
+    # --- Inject Google Font & Advanced CSS for a vibrant, glassy design ---
     st.markdown("""
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap">
     <style>
-    /* Gradient page background */
-    body {
-        background: linear-gradient(to right, #1d2b64, #f8cdda);
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    /* Use Poppins as the main font */
+    html, body, [class*="css"]  {
+        font-family: 'Poppins', sans-serif;
     }
 
-    /* Remove default header/footer from Streamlit */
+    /* Overall radial gradient background */
+    body {
+        background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
+    }
+
+    /* Hide the default header/footer from Streamlit */
     header, footer {visibility: hidden;}
 
-    /* Chat container area */
+    /* Fade in the main chat container */
+    @keyframes fadeIn {
+        0% {opacity: 0; transform: translateY(20px);}
+        100% {opacity: 1; transform: translateY(0);}
+    }
+    /* Slight upward fade for each chat message bubble */
+    @keyframes fadeInUp {
+        0% {opacity: 0; transform: translateY(8px);}
+        100% {opacity: 1; transform: translateY(0);}
+    }
+
+    /* The container for all chat elements */
     .chat-container {
         max-width: 900px;
-        margin: 0 auto;
-        margin-top: 30px;
-        margin-bottom: 50px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
+        margin: 30px auto 60px auto;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(8px);
+        border-radius: 16px;
         padding: 20px;
-        backdrop-filter: blur(6px);
-        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        animation: fadeIn 0.5s ease;
     }
 
     /* Title styling */
     .chat-title {
         text-align: center;
         color: #fff;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
         font-size: 2.5rem;
+        font-weight: 600;
     }
     .chat-subtitle {
         text-align: center;
         color: #ffe6a7;
         margin-top: 0;
-        margin-bottom: 25px;
-    }
-
-    /* The message container that st.chat_message uses */
-    .element-container {
         margin-bottom: 20px;
+        font-size: 1.1rem;
+        font-weight: 400;
     }
 
-    /* Sidebar styling */
+    /* Each message container from st.chat_message has this class */
+    .element-container {
+        animation: fadeInUp 0.3s ease;
+        margin-bottom: 15px !important;
+    }
+
+    /* Sidebar styling: dark theme */
     [data-testid="stSidebar"] {
         background: #1c1f24 !important;
         color: #fff !important;
@@ -182,29 +201,56 @@ def main():
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
         color: #ffd56b !important;
     }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
         color: #fff !important;
     }
     [data-testid="stSidebar"] .stButton>button {
         background: #ffd56b !important;
         color: #000 !important;
-        font-weight: bold;
-        border-radius: 8px;
+        font-weight: 600;
         border: none;
+        border-radius: 6px;
+        transition: background 0.3s;
+    }
+    [data-testid="stSidebar"] .stButton>button:hover {
+        background: #fbd96a !important;
     }
 
-    /* This positions the chat input at the bottom in a sticky fashion */
+    /* Tweak the file uploader to look nicer */
+    .stFileUploader label div {
+        color: #000 !important;
+        background: #ffe6a7 !important;
+        font-weight: 600;
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+        padding: 8px 0;
+        transition: background 0.3s;
+    }
+    .stFileUploader label div:hover {
+        background: #ffd56b !important;
+    }
+
+    /* Chat input pinned at the bottom with black text */
     .stChatInput {
         position: sticky;
         bottom: 0;
+        background: rgba(28,31,36,0.85) !important;
         backdrop-filter: blur(6px);
-        background: rgba(28, 31, 36, 0.85) !important;
         padding: 10px;
+        margin-top: 20px;
         border-radius: 12px;
     }
-    .stChatInput>div>div {
-        background: #fff !important;
+    /* The actual text input inside st.chat_input */
+    .stChatInput>div>div>input {
+        color: #000 !important;
+        font-weight: 500;
         border-radius: 8px;
+        padding: 10px;
+        border: none;
+    }
+    .stChatInput>div>div>input:focus {
+        outline: 2px solid #ffd56b !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -222,12 +268,12 @@ def main():
 
         st.header("How to Use")
         st.markdown("""
-1. **Optional**: Upload a PDF/DOCX/TXT/CSV/MD.  
-2. **Process**: Click **Process Document**.  
-3. **Ask**: Type your question in the chat (bottom).  
-4. **New Chat**: Clears everything.  
+1. **Optional**: Upload your PDF/DOCX/TXT/CSV/MD.  
+2. **Process**: Click "Process Document."  
+3. **Ask**: Use the pinned chat input at the bottom.  
+4. **New Chat**: Resets everything.
 
-If **no document** is processed, the bot uses Nandesh’s resume info.
+If no doc is processed, the bot uses **Nandesh's** default resume info.
         """)
         st.markdown("---")
 
@@ -246,10 +292,11 @@ If **no document** is processed, the bot uses Nandesh’s resume info.
     # ---------------- MAIN CHAT CONTAINER ----------------
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Upload & Ask • ChatGPT-Style</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Document Upload • ChatGPT‐Style Q&A</p>", unsafe_allow_html=True)
 
     # Document Upload & Processing
-    uploaded_file = st.file_uploader("Upload Document (CSV/TXT/PDF/DOCX/MD)", type=["csv", "txt", "pdf", "docx", "md"])
+    uploaded_file = st.file_uploader("Upload Document (CSV/TXT/PDF/DOCX/MD)", 
+                                     type=["csv", "txt", "pdf", "docx", "md"])
     if uploaded_file:
         if "document_processed" not in st.session_state or not st.session_state.document_processed:
             if st.button("Process Document"):
@@ -270,31 +317,24 @@ If **no document** is processed, the bot uses Nandesh’s resume info.
 
     # Display existing chat messages (user & AI)
     for message_data in st.session_state["chat_history"]:
-        role = "user"
-        content = message_data["question"]
-        with st.chat_message(role):
-            st.markdown(content)
-
-        role = "assistant"
-        content = message_data["answer"]
-        with st.chat_message(role):
-            st.markdown(content)
+        with st.chat_message("user"):
+            st.markdown(message_data["question"])
+        with st.chat_message("assistant"):
+            st.markdown(message_data["answer"])
 
     st.markdown("</div>", unsafe_allow_html=True)  # Close chat-container
 
     # -------------- Chat Input (pinned at bottom) --------------
     user_query = st.chat_input("Type your message here...")
-
-    # If user typed something
     if user_query:
-        # Show user bubble immediately
+        # Immediately display user message
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
 
-        # Generate answer
-        with st.spinner("Generating response..."):
-            if "document_processed" in st.session_state and st.session_state.document_processed:
+        # Generate the AI response
+        with st.spinner("Thinking..."):
+            if st.session_state.get("document_processed"):
                 # Use doc-based context
                 vector_store = initialize_vector_store()
                 docs = vector_store.similarity_search(user_query, k=3)
@@ -312,10 +352,8 @@ If **no document** is processed, the bot uses Nandesh’s resume info.
             response = asyncio.run(llm.ainvoke([{"role": "user", "content": prompt}]))
             bot_answer = response.content
 
-        # Update the last item in chat_history with the answer
+        # Store and display the AI response
         st.session_state["chat_history"][-1]["answer"] = bot_answer
-
-        # Display AI bubble
         with st.chat_message("assistant"):
             st.markdown(bot_answer)
 
