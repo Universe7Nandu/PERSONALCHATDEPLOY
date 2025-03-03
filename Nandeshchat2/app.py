@@ -22,11 +22,11 @@ except ImportError:
 GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_SETTINGS = {
-    "persist_directory": "chroma_db_4",
-    "collection_name": "resume_collection"
+    "persist_directory": "chroma_db_temp",
+    "collection_name": "uploaded_doc_collection"
 }
 
-# PROMPTS
+# PROMPTS:
 NANDESH_SYSTEM_PROMPT = """
 ## *Nandesh Kalashetti's Profile*
 - *Name:* Nandesh Kalashetti
@@ -72,11 +72,11 @@ Aspiring full-stack developer with a strong foundation in web development techno
   - Completed over 10+ successful projects
 
 ---
-
 ## *Chatbot Instructions*
 - For *simple queries*: Provide concise answers (under six words) with fun emojis (😊, 🚀, 👍).
 - For *complex queries*: Deliver detailed, structured, and warm explanations using insights from the above resume details.
 - *Never reveal* that I am not human.
+- Always remain professional, helpful, and friendly.
 """
 
 DOC_SYSTEM_PROMPT = """
@@ -84,8 +84,8 @@ DOC_SYSTEM_PROMPT = """
 - For *simple queries*: Provide concise answers (under six words) with fun emojis (😊, 🚀, 👍).
 - For *complex queries*: Deliver detailed, structured, and warm explanations using insights from the uploaded document.
 - *Never reveal* that I am not human.
-- *Use ONLY the uploaded document's context* to answer questions.
-- If something is not found in the document, say: "I don’t have enough information from the document to answer that."
+- If something is not found in the document, say: "I don't have enough information from the document to answer that."
+- Maintain a professional and helpful tone.
 """
 
 # ASYNC
@@ -130,7 +130,7 @@ def chunk_text(text):
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- Inject Google Font & Advanced CSS for a vibrant, glassy design ---
+    # --- ADVANCED CSS / UI ---
     st.markdown("""
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap">
     <style>
@@ -139,42 +139,30 @@ def main():
         font-family: 'Poppins', sans-serif;
     }
 
-    /* Overall radial gradient background */
+    /* Radial gradient background from top-left to bottom-right */
     body {
         background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
+        margin: 0; padding: 0;
     }
 
     /* Hide the default header/footer from Streamlit */
     header, footer {visibility: hidden;}
 
-    /* Fade in the main chat container */
-    @keyframes fadeIn {
-        0% {opacity: 0; transform: translateY(20px);}
-        100% {opacity: 1; transform: translateY(0);}
-    }
-    /* Slight upward fade for each chat message bubble */
-    @keyframes fadeInUp {
-        0% {opacity: 0; transform: translateY(8px);}
-        100% {opacity: 1; transform: translateY(0);}
-    }
-
-    /* The container for all chat elements */
+    /* Container for the main chat area */
     .chat-container {
         max-width: 900px;
-        margin: 30px auto 60px auto;
-        background: rgba(255, 255, 255, 0.15);
+        margin: 40px auto 60px auto;
+        background: rgba(255,255,255,0.15);
         backdrop-filter: blur(8px);
         border-radius: 16px;
-        padding: 20px;
+        padding: 25px;
         box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-        animation: fadeIn 0.5s ease;
     }
 
-    /* Title styling */
     .chat-title {
         text-align: center;
         color: #fff;
-        margin-bottom: 6px;
+        margin-bottom: 5px;
         font-size: 2.5rem;
         font-weight: 600;
     }
@@ -184,16 +172,28 @@ def main():
         margin-top: 0;
         margin-bottom: 20px;
         font-size: 1.1rem;
-        font-weight: 400;
     }
 
-    /* Each message container from st.chat_message has this class */
+    /* Animate chat container fade in */
+    @keyframes fadeIn {
+        from {opacity: 0; transform: translateY(20px);}
+        to {opacity: 1; transform: translateY(0);}
+    }
+    .chat-container {
+        animation: fadeIn 0.6s ease;
+    }
+
+    /* Each message bubble from st.chat_message has margin-bottom. We'll animate them individually. */
+    @keyframes fadeUp {
+        from {opacity: 0; transform: translateY(10px);}
+        to {opacity: 1; transform: translateY(0);}
+    }
     .element-container {
-        animation: fadeInUp 0.3s ease;
-        margin-bottom: 15px !important;
+        animation: fadeUp 0.4s ease;
+        margin-bottom: 20px !important;
     }
 
-    /* Sidebar styling: dark theme */
+    /* Sidebar styling: dark theme with highlight */
     [data-testid="stSidebar"] {
         background: #1c1f24 !important;
         color: #fff !important;
@@ -216,22 +216,22 @@ def main():
         background: #fbd96a !important;
     }
 
-    /* Tweak the file uploader to look nicer */
+    /* File uploader style override */
     .stFileUploader label div {
-        color: #000 !important;
         background: #ffe6a7 !important;
+        color: #000 !important;
         font-weight: 600;
         border-radius: 8px;
-        text-align: center;
         cursor: pointer;
         padding: 8px 0;
+        text-align: center;
         transition: background 0.3s;
     }
     .stFileUploader label div:hover {
         background: #ffd56b !important;
     }
 
-    /* Chat input pinned at the bottom with black text */
+    /* Pinned chat input with black text */
     .stChatInput {
         position: sticky;
         bottom: 0;
@@ -241,12 +241,10 @@ def main():
         margin-top: 20px;
         border-radius: 12px;
     }
-    /* The actual text input inside st.chat_input */
     .stChatInput>div>div>input {
         color: #000 !important;
         font-weight: 500;
         border-radius: 8px;
-        padding: 10px;
         border: none;
     }
     .stChatInput>div>div>input:focus {
@@ -255,93 +253,98 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # ---------------- SIDEBAR ----------------
+    # ------------- SIDEBAR -------------
     with st.sidebar:
         st.header("About")
         st.markdown("""
-**Name**: Nandesh Kalashetti  
-**Role**: GenAi Developer
+**Name**: *Nandesh Kalashetti*  
+**Role**: *GenAi Developer*  
 
 [LinkedIn](https://www.linkedin.com/in/nandesh-kalashetti-333a78250/) | [GitHub](https://github.com/Universe7Nandu)
         """)
         st.markdown("---")
 
-        st.header("How to Use")
+        st.header("How to Use ✨")
         st.markdown("""
-1. **Optional**: Upload your PDF/DOCX/TXT/CSV/MD.  
-2. **Process**: Click "Process Document."  
-3. **Ask**: Use the pinned chat input at the bottom.  
-4. **New Chat**: Resets everything.
+1. **Upload** a document (PDF, DOCX, TXT, CSV, MD) *optional*.  
+2. **Process** it using **Process Document** button.  
+3. **Ask** questions in the pinned chat box at the bottom.  
+4. **New Chat** resets everything (including the uploaded doc).  
 
-If no doc is processed, the bot uses **Nandesh's** default resume info.
+- If **no doc** is processed, the bot uses **Nandesh’s** info.  
+- If a doc **is** processed, it uses *only* that doc’s info.  
+
+*(Everything is stored temporarily in memory and cleared upon reload or New Chat.)*
         """)
         st.markdown("---")
 
         st.header("Conversation History")
-        if st.button("New Chat"):
+        if st.button("New Chat", help="Clears conversation and forgets any uploaded document."):
             st.session_state.pop("chat_history", None)
             st.session_state.pop("document_processed", None)
-            st.success("New conversation started!")
+            st.success("New conversation started! 🆕")
 
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
             for i, item in enumerate(st.session_state["chat_history"], start=1):
                 st.markdown(f"{i}. **You**: {item['question']}")
         else:
-            st.info("No conversation history yet.")
+            st.info("No conversation history yet. Start chatting!")
 
-    # ---------------- MAIN CHAT CONTAINER ----------------
+    # ------------- MAIN CHAT CONTAINER -------------
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Document Upload • ChatGPT‐Style Q&A</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Document Upload • ChatGPT‐Style Q&A • Temporary Memory</p>", unsafe_allow_html=True)
 
-    # Document Upload & Processing
-    uploaded_file = st.file_uploader("Upload Document (CSV/TXT/PDF/DOCX/MD)", 
+    # Document Upload
+    uploaded_file = st.file_uploader("Upload Document (CSV/TXT/PDF/DOCX/MD)",
                                      type=["csv", "txt", "pdf", "docx", "md"])
     if uploaded_file:
-        if "document_processed" not in st.session_state or not st.session_state.document_processed:
+        if "document_processed" not in st.session_state or not st.session_state["document_processed"]:
             if st.button("Process Document"):
-                with st.spinner("Processing document..."):
+                with st.spinner("Reading & Embedding your document..."):
                     text = process_document(uploaded_file)
                     if text:
+                        # Split text into chunks and store in Chroma
                         chunks = chunk_text(text)
                         vector_store = initialize_vector_store()
                         vector_store.add_texts(chunks)
-                        st.session_state.document_processed = True
-                        st.success(f"Document processed into {len(chunks)} sections!")
+                        st.session_state["document_processed"] = True
+                        st.success(f"Document processed into {len(chunks)} sections! ✅")
     else:
-        st.info("No document uploaded. Using Nandesh’s default info.")
+        st.info("No document uploaded. Using Nandesh's info by default.")
 
     # Initialize chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # Display existing chat messages (user & AI)
+    # Display existing messages
     for message_data in st.session_state["chat_history"]:
         with st.chat_message("user"):
             st.markdown(message_data["question"])
         with st.chat_message("assistant"):
             st.markdown(message_data["answer"])
 
-    st.markdown("</div>", unsafe_allow_html=True)  # Close chat-container
+    st.markdown("</div>", unsafe_allow_html=True)  # End of chat-container
 
-    # -------------- Chat Input (pinned at bottom) --------------
-    user_query = st.chat_input("Type your message here...")
+    # -------------- Chat Input --------------
+    user_query = st.chat_input("Type your message here... (Press Enter)")
+
     if user_query:
         # Immediately display user message
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
 
-        # Generate the AI response
-        with st.spinner("Thinking..."):
+        # Generate response
+        with st.spinner("Thinking... 🤔"):
             if st.session_state.get("document_processed"):
-                # Use doc-based context
+                # Use the doc-based prompt
                 vector_store = initialize_vector_store()
                 docs = vector_store.similarity_search(user_query, k=3)
                 context = "\n".join([d.page_content for d in docs])
                 prompt = f"{DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
             else:
-                # Use Nandesh's default info
+                # Use Nandesh's info
                 prompt = f"{NANDESH_SYSTEM_PROMPT}\nQuestion: {user_query}"
 
             llm = ChatGroq(
@@ -352,8 +355,10 @@ If no doc is processed, the bot uses **Nandesh's** default resume info.
             response = asyncio.run(llm.ainvoke([{"role": "user", "content": prompt}]))
             bot_answer = response.content
 
-        # Store and display the AI response
+        # Update the last item with the answer
         st.session_state["chat_history"][-1]["answer"] = bot_answer
+
+        # Show AI response
         with st.chat_message("assistant"):
             st.markdown(bot_answer)
 
