@@ -19,64 +19,61 @@ except ImportError:
     raise RuntimeError("Install pysqlite3-binary: pip install pysqlite3-binary")
 
 # 2. CONFIG
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "gsk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # PROMPTS
-NANDESH_SYSTEM_PROMPT = """
-## *Default: Nandesh’s Profile*
-- Name: **Nandesh Kalashetti**  
-- Title: **Full-Stack Web Developer**  
-- Email: **nandeshkalshetti1@gmail.com**  
-- Phone: **9420732657**  
-- Location: **Samarth Nagar, Akkalkot**  
-- Portfolio: [Click Here](https://nandesh-kalashettiportfilio2386.netlify.app/)  
 
-## *Skills & Background*
-- Strong foundation in web development (React.js, TypeScript, PHP, Java, MERN stack)
-- Education: B.Tech in IT, 8.8 CGPA
-- Internship: Katare Informatics (6 months), full-stack tasks
-- Projects: ActivityHub, E-Cart, Online Course Catalog, etc.
-- Achievements: 4/5 AICTE rating, improved org efficiency by 30%
+DEFAULT_SYSTEM_PROMPT = """
+## Friendly AI Assistant
+- If **no document** is uploaded, rely on **Nandesh’s** info below.
+- If a **document** is uploaded, **ignore** Nandesh’s info and use only the user’s doc content.
+- For **short queries**: respond briefly (≤6 words) + fun emojis.
+- For **detailed queries**: provide structured, warm, and thorough explanations.
+- **Never** reveal you are not human.
+- Maintain a friendly, professional tone.
 
----
+## Nandesh’s Info (Used Only If No Doc Is Provided)
+**Name**: Nandesh Kalashetti  
+**Role**: Full-Stack Web Developer  
+**Email**: nandeshkalshetti1@gmail.com  
+**Phone**: 9420732657  
+**Location**: Samarth Nagar, Akkalkot  
+**Skills**: React.js, TypeScript, PHP, Java, MERN stack, etc.  
+**Achievements**: 4/5 AICTE rating, improved org efficiency by 30%, etc.
 
-## *Chatbot Instructions*
-- **Short** queries → short answers (≤6 words + fun emojis).
-- **Detailed** queries → structured, warm explanations using info above.
-- If user specifically says “short answer,” keep it brief. If “detailed,” provide thorough detail.
-- *Never reveal* that you are not human.
-- Maintain a professional, helpful tone.
+(End of Nandesh’s Info)
 """
 
-DOC_SYSTEM_PROMPT = """
-## *Document-based Chat*
-- Use **only** the uploaded document’s content.
+UPLOADED_DOC_SYSTEM_PROMPT = """
+## Document-based Chat
+- Use **only** the uploaded document’s content. 
 - If the doc lacks info, say: "I don't have enough information from the document to answer that."
-- **Short** queries → short answers (≤6 words + emojis).
-- **Detailed** queries → structured, thorough answers from the doc.
-- *Never reveal* that you are not human.
-- Remain helpful, warm, and professional.
+- **Short queries** → short answers with emojis.
+- **Detailed queries** → structured, thorough answers from doc.
+- **Never** reveal you are not human.
+- Maintain a friendly, professional tone.
 """
 
 # ASYNC
 nest_asyncio.apply()
 
 # CORE FUNCTIONS
+
 def create_inmemory_vector_store():
     """
-    Returns a new, in-memory Chroma vector store
-    (No persist_directory, so ephemeral).
+    Returns a new, purely in-memory Chroma vector store.
+    No persist_directory => ephemeral (lost on reload).
     """
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    vector_store = Chroma(
+    return Chroma(
         collection_name="temp_collection",
         embedding_function=embeddings,
-        # No persist_directory => purely in memory
+        # No persist_directory => ephemeral storage
     )
-    return vector_store
 
 def process_document(file):
+    """Reads a file (PDF, CSV, TXT, DOCX, MD) and returns its text."""
     ext = os.path.splitext(file.name)[1].lower()
     try:
         if ext == ".pdf":
@@ -102,20 +99,22 @@ def chunk_text(text):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     return splitter.split_text(text)
 
-# MAIN
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- Inject advanced CSS for a modern UI ---
+    # --- Advanced CSS / UI ---
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
+    html, body, [class*="css"] {
+        font-family: 'Poppins', sans-serif;
+    }
     body {
         background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
         margin: 0; padding: 0;
     }
     header, footer {visibility: hidden;}
+
     .chat-container {
         max-width: 900px;
         margin: 40px auto 60px auto;
@@ -207,7 +206,7 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # -------------- SIDEBAR --------------
+    # -------- SIDEBAR --------
     with st.sidebar:
         st.header("About")
         st.markdown("""
@@ -220,36 +219,37 @@ def main():
 
         st.header("How to Use")
         st.markdown("""
-1. **(Optional)** Upload a PDF/DOCX/TXT/CSV/MD.  
-2. **Process** it with "Process Document."  
-3. **Ask** in the chat box below.  
-4. **New Chat** clears everything (including doc data in memory).
+1. **Upload** your resume/doc (optional).  
+2. **Process** it (if uploaded).  
+3. **Ask** questions in the chat below.  
+4. **New Chat** resets everything (doc data is forgotten).
 
-- If **no doc** is processed, chatbot uses **Nandesh’s** info.  
-- If doc is processed, it uses **only** that doc’s info (ephemeral).
+- If no doc is processed → uses **Nandesh’s** info.  
+- If doc is processed → uses **only** that doc (forget Nandesh).
         """)
         st.markdown("---")
 
         st.header("Conversation History")
         if st.button("New Chat"):
-            # Clear everything
+            # Clear everything from memory
             st.session_state.pop("chat_history", None)
             st.session_state.pop("document_processed", None)
             st.session_state.pop("vector_store", None)
             st.success("New conversation started! 🆕")
 
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
-            for i, item in enumerate(st.session_state["chat_history"], start=1):
+            for i, item in enumerate(st.session_state["chat_history"], 1):
                 st.markdown(f"{i}. **You**: {item['question']}")
         else:
             st.info("No conversation history yet. Ask away!")
 
-    # -------------- MAIN CHAT --------------
+    # -------- MAIN CHAT --------
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Document‐based or Default to Nandesh (Ephemeral)</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Upload Your Resume or Use Default Info</p>", unsafe_allow_html=True)
 
-    uploaded_file = st.file_uploader("Upload (CSV/TXT/PDF/DOCX/MD)", type=["csv", "txt", "pdf", "docx", "md"])
+    # File uploader
+    uploaded_file = st.file_uploader("Upload a PDF/DOCX/TXT/CSV/MD", type=["pdf","docx","txt","csv","md"])
     if uploaded_file:
         if not st.session_state.get("document_processed"):
             if st.button("Process Document"):
@@ -257,18 +257,17 @@ def main():
                     text = process_document(uploaded_file)
                     if text:
                         chunks = chunk_text(text)
-                        # Create a brand-new ephemeral store
                         st.session_state["vector_store"] = create_inmemory_vector_store()
                         st.session_state["vector_store"].add_texts(chunks)
                         st.session_state["document_processed"] = True
                         st.success(f"Document processed into {len(chunks)} sections! ✅")
     else:
-        st.info("No document uploaded. Using Nandesh's info by default.")
+        st.info("No document uploaded. Currently using Nandesh's default info.")
 
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # Show the chat so far
+    # Display existing conversation
     for msg in st.session_state["chat_history"]:
         with st.chat_message("user"):
             st.markdown(msg["question"])
@@ -277,24 +276,25 @@ def main():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # -------------- Chat Input --------------
+    # -------- Chat Input --------
     user_query = st.chat_input("Type your message here... (Press Enter)")
     if user_query:
-        # Immediately display user message
+        # Show user message immediately
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
 
+        # Generate the response
         with st.spinner("Thinking..."):
             if st.session_state.get("document_processed") and "vector_store" in st.session_state:
-                # Use doc context from ephemeral in-memory store
+                # Use the doc context only
                 vector_store = st.session_state["vector_store"]
                 docs = vector_store.similarity_search(user_query, k=3)
-                context = "\n".join([d.page_content for d in docs])
-                prompt = f"{DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
+                context = "\n".join(d.page_content for d in docs)
+                prompt = f"{UPLOADED_DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
             else:
-                # Use Nandesh's default
-                prompt = f"{NANDESH_SYSTEM_PROMPT}\nQuestion: {user_query}"
+                # Use default Nandesh info
+                prompt = f"{DEFAULT_SYSTEM_PROMPT}\nQuestion: {user_query}"
 
             llm = ChatGroq(
                 temperature=0.7,
@@ -304,7 +304,7 @@ def main():
             response = asyncio.run(llm.ainvoke([{"role": "user", "content": prompt}]))
             bot_answer = response.content
 
-        # Update last answer
+        # Update the answer in chat history
         st.session_state["chat_history"][-1]["answer"] = bot_answer
         with st.chat_message("assistant"):
             st.markdown(bot_answer)
