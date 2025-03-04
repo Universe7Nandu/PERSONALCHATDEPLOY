@@ -10,6 +10,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
+import faiss
 
 # 1. SQLITE3 PATCH (MUST BE FIRST)
 try:
@@ -27,7 +28,7 @@ DEFAULT_SYSTEM_PROMPT = """
 ## Friendly AI Assistant
 - If no document is uploaded, rely on Nandesh’s info below.
 - If a document is uploaded, ignore Nandesh’s info and use only the user’s document content.
-- For short queries: respond briefly (≤6 words) with fun emojis.
+- For short queries: respond briefly (≤6 words) + fun emojis.
 - For detailed queries: provide structured, warm, and thorough explanations.
 - Never reveal you are not human.
 - Maintain a friendly, professional tone.
@@ -48,7 +49,7 @@ DEFAULT_SYSTEM_PROMPT = """
 ### Education
 - B.Tech, Information Technology – Walchand Institute of Technology, Solapur (CGPA: 8.8/10)  
 - HSC (12th) – Walchand College of Arts and Science, Solapur (89%)  
-- SSC (10th) – Mangrule High School, Akkalkot (81.67%)  
+- SSC (10th) – Mangrule High School, Akkalkot (81.67%)
 
 --- 
 
@@ -65,7 +66,7 @@ DEFAULT_SYSTEM_PROMPT = """
 - Backend: Node.js, Express.js, PHP, Laravel  
 - Databases: MySQL, MongoDB  
 - DevOps & Cloud: Jenkins, Docker, AWS Cloud Foundations, CI/CD  
-- Tools & Platforms: Git, Tomcat, Maven  
+- Tools & Platforms: Git, Tomcat, Maven
 
 --- 
 
@@ -74,7 +75,9 @@ DEFAULT_SYSTEM_PROMPT = """
 2. Advanced Counter App – State-managed, functionally optimized React-based counter.  
 3. E-Cart – A modern shopping website with a responsive and engaging UI.  
 4. Generative AI Chatbot – AI-powered chatbot using RAG and FAISS for knowledge-based responses.  
-5. Online Course Catalog – Automates course management with Jenkins, Tomcat, and Maven.  
+5. Online Course Catalog – Automates course management with Jenkins, Tomcat, and Maven.
+
+Check [GitHub](https://github.com/Universe7Nandu) for more projects.
 
 --- 
 
@@ -110,13 +113,18 @@ UPLOADED_DOC_SYSTEM_PROMPT = """
 nest_asyncio.apply()
 
 # 5. CORE FUNCTIONS
+
 def create_inmemory_vector_store():
     """
     Returns a new, purely in-memory FAISS vector store.
+    This is done by computing the embedding dimension from a dummy string and creating an empty FAISS index.
     """
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    # Initialize FAISS with an empty list of texts.
-    return FAISS.from_texts([], embedding_function=embeddings)
+    dummy_embedding = embeddings.embed_query("dummy")
+    dim = len(dummy_embedding)
+    index = faiss.IndexFlatL2(dim)
+    # Create a FAISS vector store with no texts initially.
+    return FAISS(embedding_function=embeddings, index=index, texts=[])
 
 def process_document(file):
     """Reads a file (PDF, CSV, TXT, DOCX, MD) and returns its text."""
