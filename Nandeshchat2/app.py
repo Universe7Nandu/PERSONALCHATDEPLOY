@@ -19,7 +19,7 @@ except ImportError:
     raise RuntimeError("Install pysqlite3-binary: pip install pysqlite3-binary")
 
 # 2. CONFIG
-GROQ_API_KEY = "gsk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # PROMPTS
