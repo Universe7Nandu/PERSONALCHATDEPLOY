@@ -8,9 +8,8 @@ from PyPDF2 import PdfReader
 from docx import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
-from chromadb.config import Settings
 
 # 1. SQLITE3 PATCH (MUST BE FIRST)
 try:
@@ -23,7 +22,7 @@ except ImportError:
 GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# 3. PROMPTS
+# PROMPTS
 DEFAULT_SYSTEM_PROMPT = """
 ## Friendly AI Assistant
 - If **no document** is uploaded, rely on **Nandesh’s** info below.
@@ -74,7 +73,7 @@ DEFAULT_SYSTEM_PROMPT = """
 1. **ActivityHub** – A social learning platform with React.js, PHP, and MySQL.  
 2. **Advanced Counter App** – State-managed, functionally optimized React-based counter.  
 3. **E-Cart** – A **modern** shopping website with a responsive and engaging UI.  
-4. **Generative AI Chatbot** – AI-powered chatbot using **RAG (Retrieval-Augmented Generation)** and **ChromaDB** for knowledge-based responses.  
+4. **Generative AI Chatbot** – AI-powered chatbot using **RAG (Retrieval-Augmented Generation)** and **FAISS** for knowledge-based responses.  
 5. **Online Course Catalog** – Automates course management with **Jenkins, Tomcat, and Maven**.  
 
 Check [GitHub](https://github.com/Universe7Nandu) for more projects.  
@@ -103,7 +102,7 @@ Check [GitHub](https://github.com/Universe7Nandu) for more projects.
 
 UPLOADED_DOC_SYSTEM_PROMPT = """
 ## Document-based Chat
-- Use **only** the uploaded document’s content.
+- Use **only** the uploaded document’s content. 
 - If the doc lacks info, say: "I don't have enough information from the document to answer that."
 - **Short queries** → short answers with emojis.
 - **Detailed queries** → structured, thorough answers from doc.
@@ -111,29 +110,19 @@ UPLOADED_DOC_SYSTEM_PROMPT = """
 - Maintain a friendly, professional tone.
 """
 
-# 4. ASYNC
+# ASYNC
 nest_asyncio.apply()
 
-# 5. CORE FUNCTIONS
+# CORE FUNCTIONS
+
 def create_inmemory_vector_store():
     """
-    Returns a new, purely in-memory Chroma vector store,
-    ensuring no persistent tenant or database checks.
+    Returns a new, purely in-memory FAISS vector store.
+    No persist_directory => ephemeral storage
     """
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-
-    # Provide a Settings object that ensures ephemeral usage
-    chroma_settings = Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=None,      # or ":memory:"
-        anonymized_telemetry=False
-    )
-
-    return Chroma(
-        collection_name="temp_collection",
-        embedding_function=embeddings,
-        client_settings=chroma_settings
-    )
+    # Create an empty FAISS store. We'll add texts after we process the document.
+    return FAISS(embedding_function=embeddings)
 
 def process_document(file):
     """Reads a file (PDF, CSV, TXT, DOCX, MD) and returns its text."""
@@ -165,16 +154,18 @@ def chunk_text(text):
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- ADVANCED CSS / UI ---
+    # --- Advanced CSS / UI ---
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
+    html, body, [class*="css"] {
+        font-family: 'Poppins', sans-serif;
+    }
     body {
         background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
         margin: 0; padding: 0;
     }
-    header, footer { visibility: hidden; }
+    header, footer {visibility: hidden;}
     .chat-container {
         max-width: 900px;
         margin: 40px auto 60px auto;
@@ -266,7 +257,7 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # -------- SIDEBAR --------
+    # Sidebar
     with st.sidebar:
         st.header("About")
         st.markdown("""
@@ -278,13 +269,13 @@ def main():
         st.markdown("---")
         st.header("How to Use")
         st.markdown("""
-1. **Upload** your resume/doc (optional).  
-2. **Process** it (if uploaded).  
+1. **Upload** a doc (PDF, DOCX, TXT, CSV) (optional).  
+2. **Process** it.  
 3. **Ask** questions in the chat below.  
-4. **New Chat** resets everything (doc data is forgotten).
+4. **New Chat** resets everything.
 
-- If no doc is processed → uses **Nandesh’s** info.  
-- If doc is processed → uses **only** that doc (forget Nandesh).
+- No doc → uses **Nandesh** info  
+- With doc → uses **only** doc info  
         """)
         st.markdown("---")
         st.header("Conversation History")
@@ -293,19 +284,20 @@ def main():
             st.session_state.pop("document_processed", None)
             st.session_state.pop("vector_store", None)
             st.success("New conversation started! 🆕")
+
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
             for i, item in enumerate(st.session_state["chat_history"], 1):
                 st.markdown(f"{i}. **You**: {item['question']}")
         else:
-            st.info("No conversation history yet. Ask away!")
+            st.info("No conversation history yet.")
 
-    # -------- MAIN CHAT --------
+    # Main Container
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Upload Your Resume or Use Default Info</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Upload Document or Use Nandesh's Info</p>", unsafe_allow_html=True)
 
-    # File uploader
-    uploaded_file = st.file_uploader("Upload a PDF/DOCX/TXT/CSV/MD", type=["pdf","docx","txt","csv","md"])
+    # File Uploader
+    uploaded_file = st.file_uploader("Upload a PDF/DOCX/TXT/CSV", type=["pdf","docx","txt","csv"])
     if uploaded_file:
         if not st.session_state.get("document_processed"):
             if st.button("Process Document"):
@@ -318,34 +310,35 @@ def main():
                         st.session_state["document_processed"] = True
                         st.success(f"Document processed into {len(chunks)} sections! ✅")
     else:
-        st.info("No document uploaded. Currently using Nandesh's default info.")
+        st.info("No document uploaded. Using Nandesh's default info...")
 
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
     # Display existing conversation
-    for msg in st.session_state["chat_history"]:
+    for item in st.session_state["chat_history"]:
         with st.chat_message("user"):
-            st.markdown(msg["question"])
+            st.markdown(item["question"])
         with st.chat_message("assistant"):
-            st.markdown(msg["answer"])
+            st.markdown(item["answer"])
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # -------- Chat Input --------
-    user_query = st.chat_input("Type your message here... (Press Enter)")
+    # Chat input
+    user_query = st.chat_input("Type your message here...")
     if user_query:
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
+
         with st.spinner("Thinking..."):
-            # If doc processed, use doc-based context
+            # If doc processed, use doc context
             if st.session_state.get("document_processed") and "vector_store" in st.session_state:
                 vector_store = st.session_state["vector_store"]
                 docs = vector_store.similarity_search(user_query, k=3)
                 context = "\n".join(d.page_content for d in docs)
                 prompt = f"{UPLOADED_DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
             else:
-                # Otherwise use default
+                # Use default info
                 prompt = f"{DEFAULT_SYSTEM_PROMPT}\nQuestion: {user_query}"
 
             llm = ChatGroq(
