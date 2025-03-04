@@ -21,12 +21,8 @@ except ImportError:
 # 2. CONFIG
 GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-CHROMA_SETTINGS = {
-    "persist_directory": "chroma_db_temp",
-    "collection_name": "uploaded_doc_collection"
-}
 
-# PROMPTS:
+# PROMPTS
 NANDESH_SYSTEM_PROMPT = """
 ## *Default: Nandesh’s Profile*
 - Name: **Nandesh Kalashetti**  
@@ -67,13 +63,18 @@ DOC_SYSTEM_PROMPT = """
 nest_asyncio.apply()
 
 # CORE FUNCTIONS
-def initialize_vector_store():
+def create_inmemory_vector_store():
+    """
+    Returns a new, in-memory Chroma vector store
+    (No persist_directory, so ephemeral).
+    """
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    return Chroma(
-        persist_directory=CHROMA_SETTINGS["persist_directory"],
+    vector_store = Chroma(
+        collection_name="temp_collection",
         embedding_function=embeddings,
-        collection_name=CHROMA_SETTINGS["collection_name"]
+        # No persist_directory => purely in memory
     )
+    return vector_store
 
 def process_document(file):
     ext = os.path.splitext(file.name)[1].lower()
@@ -105,22 +106,16 @@ def chunk_text(text):
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # Inject advanced CSS with unsafe_allow_html=True so it does NOT print
+    # --- Inject advanced CSS for a modern UI ---
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-
-    /* Overall font & background */
-    html, body, [class*="css"] {
-        font-family: 'Poppins', sans-serif;
-    }
+    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
     body {
         background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
         margin: 0; padding: 0;
     }
     header, footer {visibility: hidden;}
-
-    /* Container for chat */
     .chat-container {
         max-width: 900px;
         margin: 40px auto 60px auto;
@@ -157,8 +152,6 @@ def main():
         from {opacity: 0; transform: translateY(10px);}
         to {opacity: 1; transform: translateY(0);}
     }
-
-    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: #1c1f24 !important;
         color: #fff !important;
@@ -180,8 +173,6 @@ def main():
     [data-testid="stSidebar"] .stButton>button:hover {
         background: #fbd96a !important;
     }
-
-    /* File uploader style */
     .stFileUploader label div {
         background: #ffe6a7 !important;
         color: #000 !important;
@@ -195,8 +186,6 @@ def main():
     .stFileUploader label div:hover {
         background: #ffd56b !important;
     }
-
-    /* Pinned chat input at bottom, black text */
     .stChatInput {
         position: sticky;
         bottom: 0;
@@ -218,11 +207,9 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # ---------------- SIDEBAR ----------------
+    # -------------- SIDEBAR --------------
     with st.sidebar:
         st.header("About")
-        image_path = os.path.join(os.path.dirname(__file__), "photo3.jpg")
-        st.image(image_path, width=150, caption="Local Photo")
         st.markdown("""
 **Name**: *Nandesh Kalashetti*  
 **Role**: *GenAi Developer*  
@@ -233,20 +220,22 @@ def main():
 
         st.header("How to Use")
         st.markdown("""
-1. (Optional) **Upload** a PDF/DOCX/TXT/CSV/MD.  
+1. **(Optional)** Upload a PDF/DOCX/TXT/CSV/MD.  
 2. **Process** it with "Process Document."  
 3. **Ask** in the chat box below.  
-4. **New Chat** clears everything.
+4. **New Chat** clears everything (including doc data in memory).
 
-- If no doc is processed, chatbot uses **Nandesh’s** info.  
-- If doc is processed, it uses **only** that doc’s info.
+- If **no doc** is processed, chatbot uses **Nandesh’s** info.  
+- If doc is processed, it uses **only** that doc’s info (ephemeral).
         """)
         st.markdown("---")
 
         st.header("Conversation History")
-        if st.button("New Chat", help="Clear conversation & doc memory."):
+        if st.button("New Chat"):
+            # Clear everything
             st.session_state.pop("chat_history", None)
             st.session_state.pop("document_processed", None)
+            st.session_state.pop("vector_store", None)
             st.success("New conversation started! 🆕")
 
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
@@ -255,31 +244,31 @@ def main():
         else:
             st.info("No conversation history yet. Ask away!")
 
-    # ---------------- MAIN CHAT ----------------
+    # -------------- MAIN CHAT --------------
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     st.markdown("<h1 class='chat-title'>AI Resume Assistant</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='chat-subtitle'>Document‐based or Default to Nandesh</p>", unsafe_allow_html=True)
+    st.markdown("<p class='chat-subtitle'>Document‐based or Default to Nandesh (Ephemeral)</p>", unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader("Upload (CSV/TXT/PDF/DOCX/MD)", type=["csv", "txt", "pdf", "docx", "md"])
     if uploaded_file:
-        if "document_processed" not in st.session_state or not st.session_state["document_processed"]:
+        if not st.session_state.get("document_processed"):
             if st.button("Process Document"):
                 with st.spinner("Reading & Embedding your document..."):
                     text = process_document(uploaded_file)
                     if text:
                         chunks = chunk_text(text)
-                        vector_store = initialize_vector_store()
-                        vector_store.add_texts(chunks)
+                        # Create a brand-new ephemeral store
+                        st.session_state["vector_store"] = create_inmemory_vector_store()
+                        st.session_state["vector_store"].add_texts(chunks)
                         st.session_state["document_processed"] = True
                         st.success(f"Document processed into {len(chunks)} sections! ✅")
     else:
         st.info("No document uploaded. Using Nandesh's info by default.")
 
-    # Chat history
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # Display chat so far
+    # Show the chat so far
     for msg in st.session_state["chat_history"]:
         with st.chat_message("user"):
             st.markdown(msg["question"])
@@ -291,16 +280,15 @@ def main():
     # -------------- Chat Input --------------
     user_query = st.chat_input("Type your message here... (Press Enter)")
     if user_query:
-        # Show user message immediately
+        # Immediately display user message
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
 
-        # Decide which context to use
         with st.spinner("Thinking..."):
-            if st.session_state.get("document_processed"):
-                # Use doc context
-                vector_store = initialize_vector_store()
+            if st.session_state.get("document_processed") and "vector_store" in st.session_state:
+                # Use doc context from ephemeral in-memory store
+                vector_store = st.session_state["vector_store"]
                 docs = vector_store.similarity_search(user_query, k=3)
                 context = "\n".join([d.page_content for d in docs])
                 prompt = f"{DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
