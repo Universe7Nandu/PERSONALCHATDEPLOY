@@ -1,4 +1,3 @@
-
 import sys
 import os
 import asyncio
@@ -11,6 +10,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_groq import ChatGroq
+from chromadb.config import Settings
 
 # 1. SQLITE3 PATCH (MUST BE FIRST)
 try:
@@ -23,8 +23,7 @@ except ImportError:
 GROQ_API_KEY = "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"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# PROMPTS
-
+# 3. PROMPTS
 DEFAULT_SYSTEM_PROMPT = """
 ## Friendly AI Assistant
 - If **no document** is uploaded, rely on **Nandesh’s** info below.
@@ -44,7 +43,6 @@ DEFAULT_SYSTEM_PROMPT = """
 - **GitHub**: [github.com/Universe7Nandu](https://github.com/Universe7Nandu)  
 - **LeetCode**: [leetcode.com/u/Nandesh2386](https://leetcode.com/u/Nandesh2386)
 - **Linkedin**: [linkedin.com/in/nandesh-kalashetti-333a78250](https://www.linkedin.com/in/nandesh-kalashetti-333a78250/)  
-
 
 ---
 
@@ -105,7 +103,7 @@ Check [GitHub](https://github.com/Universe7Nandu) for more projects.
 
 UPLOADED_DOC_SYSTEM_PROMPT = """
 ## Document-based Chat
-- Use **only** the uploaded document’s content. 
+- Use **only** the uploaded document’s content.
 - If the doc lacks info, say: "I don't have enough information from the document to answer that."
 - **Short queries** → short answers with emojis.
 - **Detailed queries** → structured, thorough answers from doc.
@@ -113,21 +111,28 @@ UPLOADED_DOC_SYSTEM_PROMPT = """
 - Maintain a friendly, professional tone.
 """
 
-# ASYNC
+# 4. ASYNC
 nest_asyncio.apply()
 
-# CORE FUNCTIONS
-
+# 5. CORE FUNCTIONS
 def create_inmemory_vector_store():
     """
-    Returns a new, purely in-memory Chroma vector store.
-    No persist_directory => ephemeral (lost on reload).
+    Returns a new, purely in-memory Chroma vector store,
+    ensuring no persistent tenant or database checks.
     """
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+
+    # Provide a Settings object that ensures ephemeral usage
+    chroma_settings = Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=None,      # or ":memory:"
+        anonymized_telemetry=False
+    )
+
     return Chroma(
         collection_name="temp_collection",
         embedding_function=embeddings,
-        # No persist_directory => ephemeral storage
+        client_settings=chroma_settings
     )
 
 def process_document(file):
@@ -160,19 +165,16 @@ def chunk_text(text):
 def main():
     st.set_page_config(page_title="AI Resume Assistant", layout="wide")
 
-    # --- Advanced CSS / UI ---
+    # --- ADVANCED CSS / UI ---
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-    html, body, [class*="css"] {
-        font-family: 'Poppins', sans-serif;
-    }
+    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
     body {
         background: radial-gradient(circle at top left, #1d2b64, #f8cdda);
         margin: 0; padding: 0;
     }
-    header, footer {visibility: hidden;}
-
+    header, footer { visibility: hidden; }
     .chat-container {
         max-width: 900px;
         margin: 40px auto 60px auto;
@@ -274,7 +276,6 @@ def main():
 [LinkedIn](https://www.linkedin.com/in/nandesh-kalashetti-333a78250/) | [GitHub](https://github.com/Universe7Nandu)
         """)
         st.markdown("---")
-
         st.header("How to Use")
         st.markdown("""
 1. **Upload** your resume/doc (optional).  
@@ -286,15 +287,12 @@ def main():
 - If doc is processed → uses **only** that doc (forget Nandesh).
         """)
         st.markdown("---")
-
         st.header("Conversation History")
         if st.button("New Chat"):
-            # Clear everything from memory
             st.session_state.pop("chat_history", None)
             st.session_state.pop("document_processed", None)
             st.session_state.pop("vector_store", None)
             st.success("New conversation started! 🆕")
-
         if "chat_history" in st.session_state and st.session_state["chat_history"]:
             for i, item in enumerate(st.session_state["chat_history"], 1):
                 st.markdown(f"{i}. **You**: {item['question']}")
@@ -331,27 +329,23 @@ def main():
             st.markdown(msg["question"])
         with st.chat_message("assistant"):
             st.markdown(msg["answer"])
-
     st.markdown("</div>", unsafe_allow_html=True)
 
     # -------- Chat Input --------
     user_query = st.chat_input("Type your message here... (Press Enter)")
     if user_query:
-        # Show user message immediately
         st.session_state["chat_history"].append({"question": user_query, "answer": ""})
         with st.chat_message("user"):
             st.markdown(user_query)
-
-        # Generate the response
         with st.spinner("Thinking..."):
+            # If doc processed, use doc-based context
             if st.session_state.get("document_processed") and "vector_store" in st.session_state:
-                # Use the doc context only
                 vector_store = st.session_state["vector_store"]
                 docs = vector_store.similarity_search(user_query, k=3)
                 context = "\n".join(d.page_content for d in docs)
                 prompt = f"{UPLOADED_DOC_SYSTEM_PROMPT}\nContext:\n{context}\nQuestion: {user_query}"
             else:
-                # Use default Nandesh info
+                # Otherwise use default
                 prompt = f"{DEFAULT_SYSTEM_PROMPT}\nQuestion: {user_query}"
 
             llm = ChatGroq(
@@ -362,11 +356,9 @@ def main():
             response = asyncio.run(llm.ainvoke([{"role": "user", "content": prompt}]))
             bot_answer = response.content
 
-        # Update the answer in chat history
         st.session_state["chat_history"][-1]["answer"] = bot_answer
         with st.chat_message("assistant"):
             st.markdown(bot_answer)
 
 if __name__ == "__main__":
     main()
-
